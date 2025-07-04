@@ -1,15 +1,11 @@
-import cv2
+import cv2, base64, os, threading
 import base64
 import os # <-- Impor library 'os'
 from flask import Flask
 from flask_socketio import SocketIO, emit
 from ultralytics import YOLO
 
-# ===================================================================
-# MEMAKSA OPENCV MENGGUNAKAN TRANSPORT TCP UNTUK RTSP
-# Ini adalah perbaikan untuk skenario "Bisa di VLC, Gagal di OpenCV"
 os.environ['OPENCV_FFMPEG_CAPTURE_OPTIONS'] = 'rtsp_transport;tcp'
-# ===================================================================
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'secret!key' 
@@ -28,49 +24,62 @@ except Exception as e:
 RTSP_URL_OVERHEAD = "rtsp://root:w4h!D.xXx@157.119.222.50:5540/media2/stream.sdp?profile=Profile200"
 RTSP_URL_FRONTAL = "rtsp://root:w4h!D.xXx@157.119.222.50:5541/media2/stream.sdp?profile=Profile200"
 
+# --- KELAS UNTUK VIDEO STREAM DENGAN THREAD ---
+class VideoStream:
+    def __init__(self, src=0):
+        self.stream = cv2.VideoCapture(src, cv2.CAP_FFMPEG)
+        (self.grabbed, self.frame) = self.stream.read()
+        self.stopped = False
+
+    def start(self):
+        threading.Thread(target=self.update, args=()).start()
+        return self
+
+    def update(self):
+        while True:
+            if self.stopped:
+                return
+            (self.grabbed, self.frame) = self.stream.read()
+
+    def read(self):
+        return self.frame
+
+    def stop(self):
+        self.stopped = True
+
 def generate_overhead_stream():
-    """Proses dan stream untuk kamera overhead dari stream RTSP."""
-    # Timeout ditambahkan untuk koneksi awal yang lebih sabar (dalam milidetik)
-    video_capture = cv2.VideoCapture(RTSP_URL_OVERHEAD, cv2.CAP_FFMPEG) 
-    print(f"Mencoba terhubung ke stream overhead: {RTSP_URL_OVERHEAD}")
+    vs = VideoStream(src=RTSP_URL_OVERHEAD).start()
+    print(f"Stream overhead dimulai dengan threading...")
     while True:
-        success, frame = video_capture.read()
-        if not success:
-            print("Gagal membaca frame dari stream overhead. Mencoba menghubungkan kembali...")
-            socketio.sleep(2)
-            video_capture.release()
-            video_capture = cv2.VideoCapture(RTSP_URL_OVERHEAD, cv2.CAP_FFMPEG)
+        frame = vs.read()
+        if frame is None:
             continue
-        
+
         results = model_overhead(frame, stream=False, verbose=False)
         rendered_frame = results[0].plot()
-        
+
         ret, buffer = cv2.imencode('.jpg', rendered_frame)
         if not ret: continue
-            
+        
         frame_base64 = base64.b64encode(buffer.tobytes()).decode('utf-8')
         socketio.emit('overhead_stream', {'image_data': frame_base64})
         socketio.sleep(0.05)
 
 def generate_frontal_stream():
-    """Proses dan stream untuk kamera frontal dari stream RTSP."""
-    video_capture = cv2.VideoCapture(RTSP_URL_FRONTAL, cv2.CAP_FFMPEG)
-    print(f"Mencoba terhubung ke stream frontal: {RTSP_URL_FRONTAL}")
+    vs = VideoStream(src=RTSP_URL_FRONTAL).start()
+    print(f"Stream frontal dimulai dengan threading...")
     while True:
-        success, frame = video_capture.read()
-        if not success:
-            print("Gagal membaca frame dari stream frontal. Mencoba menghubungkan kembali...")
-            socketio.sleep(2)
-            video_capture.release()
-            video_capture = cv2.VideoCapture(RTSP_URL_FRONTAL, cv2.CAP_FFMPEG)
+        frame = vs.read()
+        if frame is None:
             continue
-            
+
+        # Lakukan proses YOLO seperti biasa di sini
         results = model_frontal(frame, stream=False, verbose=False)
         rendered_frame = results[0].plot()
 
         ret, buffer = cv2.imencode('.jpg', rendered_frame)
         if not ret: continue
-            
+        
         frame_base64 = base64.b64encode(buffer.tobytes()).decode('utf-8')
         socketio.emit('frontal_stream', {'image_data': frame_base64})
         socketio.sleep(0.05)
