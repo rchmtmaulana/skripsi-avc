@@ -3,6 +3,7 @@ import base64
 import os # <-- Impor library 'os'
 from flask import Flask
 from flask_socketio import SocketIO, emit
+import torch
 from ultralytics import YOLO
 
 os.environ['OPENCV_FFMPEG_CAPTURE_OPTIONS'] = 'rtsp_transport;tcp'
@@ -10,12 +11,13 @@ os.environ['OPENCV_FFMPEG_CAPTURE_OPTIONS'] = 'rtsp_transport;tcp'
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'secret!key' 
 socketio = SocketIO(app, cors_allowed_origins="*")
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # Muat Model
 try:
-    model_overhead = YOLO('models/overhead.pt')
-    model_frontal = YOLO('models/frontal.pt')
-    print("Model 'overhead.pt' dan 'frontal.pt' berhasil dimuat.")
+    model_overhead = YOLO('models/overhead.pt').to(device)
+    model_frontal = YOLO('models/frontal.pt').to(device) 
+    print("Model 'overhead.pt' dan 'frontal.pt' berhasil dimuat ke device.")
 except Exception as e:
     print(f"Gagal memuat model: {e}")
     exit()

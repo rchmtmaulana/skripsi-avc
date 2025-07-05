@@ -12,7 +12,7 @@ function AnalysisPanel({ axleCount = 0, vehicleId = "---", classification = "--"
             <p className="text-xl font-bold font-mono">{vehicleId}</p>
             </div>
             <div className="bg-gray-700 p-4 rounded-lg">
-            <p className="text-sm text-gray-400 mb-1">Jumlah Gardan</p>
+            <p className="text-sm text-gray-400 mb-1">Jumlah Gandar</p>
             <p className="text-xl font-bold font-mono text-cyan-400">{axleCount}</p>
             </div>
             <div className="bg-gray-700 p-4 rounded-lg">
