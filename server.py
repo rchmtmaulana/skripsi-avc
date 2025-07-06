@@ -1,6 +1,6 @@
 import cv2, base64, os, threading
 import base64
-import os # <-- Impor library 'os'
+import os
 from flask import Flask
 from flask_socketio import SocketIO, emit
 import torch
@@ -26,7 +26,6 @@ except Exception as e:
 RTSP_URL_OVERHEAD = "rtsp://root:w4h!D.xXx@157.119.222.50:5540/media2/stream.sdp?profile=Profile200"
 RTSP_URL_FRONTAL = "rtsp://root:w4h!D.xXx@157.119.222.50:5541/media2/stream.sdp?profile=Profile200"
 
-# --- KELAS UNTUK VIDEO STREAM DENGAN THREAD ---
 class VideoStream:
     def __init__(self, src=0):
         self.stream = cv2.VideoCapture(src, cv2.CAP_FFMPEG)
@@ -75,7 +74,6 @@ def generate_frontal_stream():
         if frame is None:
             continue
 
-        # Lakukan proses YOLO seperti biasa di sini
         results = model_frontal(frame, stream=False, verbose=False)
         rendered_frame = results[0].plot()
 

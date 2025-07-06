@@ -12,7 +12,6 @@ function App() {
         const socket = io('http://127.0.0.1:5000');
         socket.on('connect', () => console.log('Terhubung ke server backend!'));
 
-        // Listener untuk stream overhead, sekarang juga menerima data axle_count
         socket.on('overhead_stream', data => {
         setOverheadFrame(data.image_data);
         if (data.axle_count !== undefined) {
@@ -20,7 +19,6 @@ function App() {
         }
         });
 
-        // Listener untuk stream frontal
         socket.on('frontal_stream', data => {
         setFrontalFrame(data.image_data);
         });

@@ -1,4 +1,3 @@
-// src/AnalysisPanel.js
 import React from 'react';
 
 function AnalysisPanel({ axleCount = 0, vehicleId = "---", classification = "--", detectionTime = "--:--:--" }) {
