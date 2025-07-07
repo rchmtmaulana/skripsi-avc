@@ -6,53 +6,124 @@ import AnalysisPanel from './analysisPanel';
 function App() {
     const [overheadFrame, setOverheadFrame] = useState('');
     const [frontalFrame, setFrontalFrame] = useState('');
-    const [axleCount, setAxleCount] = useState(0); 
+    const [axleCount, setAxleCount] = useState(0);
+    const [vehicleId, setVehicleId] = useState('---');
+    const [classification, setClassification] = useState('--');
+    const [detectionTime, setDetectionTime] = useState('--:--:--');
+    const [tireConfig, setTireConfig] = useState(null);
+    const [detectedAxles, setDetectedAxles] = useState(0);
+    const [socket, setSocket] = useState(null);
 
     useEffect(() => {
-        const socket = io('http://127.0.0.1:5000');
-        socket.on('connect', () => console.log('Terhubung ke server backend!'));
+        const newSocket = io('http://127.0.0.1:5000');
+        setSocket(newSocket);
 
-        socket.on('overhead_stream', data => {
-        setOverheadFrame(data.image_data);
-        if (data.axle_count !== undefined) {
-            setAxleCount(data.axle_count);
-        }
+        newSocket.on('connect', () => {
+            console.log('Terhubung ke server backend!');
         });
 
-        socket.on('frontal_stream', data => {
-        setFrontalFrame(data.image_data);
+        newSocket.on('overhead_stream', data => {
+            setOverheadFrame(data.image_data);
+            if (data.axle_count !== undefined) {
+                setAxleCount(data.axle_count);
+            }
+            if (data.detected_axles !== undefined) {
+                setDetectedAxles(data.detected_axles);
+            }
+            if (data.vehicle_id) {
+                setVehicleId(data.vehicle_id);
+            }
+            if (data.classification) {
+                setClassification(data.classification);
+            }
+            if (data.detection_time) {
+                setDetectionTime(data.detection_time);
+            }
+        });
+
+        newSocket.on('frontal_stream', data => {
+            setFrontalFrame(data.image_data);
+            if (data.tire_config !== undefined) {
+                setTireConfig(data.tire_config);
+            }
+            if (data.vehicle_id) {
+                setVehicleId(data.vehicle_id);
+            }
+            if (data.classification) {
+                setClassification(data.classification);
+            }
+            if (data.detection_time) {
+                setDetectionTime(data.detection_time);
+            }
         });
 
         return () => {
-        console.log('Memutuskan koneksi dari server backend.');
-        socket.disconnect();
+            console.log('Memutuskan koneksi dari server backend.');
+            newSocket.disconnect();
         };
     }, []);
 
+    const handleResetClassification = () => {
+        if (socket) {
+            socket.emit('reset_classification');
+            // Reset state lokal
+            setAxleCount(0);
+            setVehicleId('---');
+            setClassification('--');
+            setDetectionTime('--:--:--');
+            setDetectedAxles(0);
+            setTireConfig(null);
+        }
+    };
+
     return (
         <div className="bg-gray-900 text-white min-h-screen p-4 sm:p-6 md:p-8">
-        <div className="max-w-7xl mx-auto">
-            <header className="mb-8 text-center">
-            <h1 className="text-3xl sm:text-4xl font-bold text-cyan-400">
-                Automatic Vehicle Classification
-            </h1>
-            <p className="text-gray-400 mt-2">
-                Analisis Gandar dan Tipe Kendaraan Berbasis Visi Komputer
-            </p>
-            </header>
+            <div className="max-w-7xl mx-auto">
+                <header className="mb-8 text-center">
+                    <h1 className="text-3xl sm:text-4xl font-bold text-cyan-400">
+                        Automatic Vehicle Classification
+                    </h1>
+                    <p className="text-gray-400 mt-2">
+                        Analisis Gandar dan Tipe Kendaraan Berbasis Visi Komputer
+                    </p>
+                </header>
 
-            <main className="flex flex-col gap-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <VideoStream title="Kamera Frontal (Deteksi Golongan I/II)" frameData={frontalFrame} />
-                <VideoStream title="Kamera Overhead (Deteksi Gandar)" frameData={overheadFrame} />
+                <main className="flex flex-col gap-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <VideoStream 
+                            title="Kamera Frontal (Deteksi Konfigurasi Ban)" 
+                            frameData={frontalFrame}
+                            subtitle={tireConfig ? `Konfigurasi: ${tireConfig}` : 'Menunggu deteksi...'}
+                        />
+                        <VideoStream 
+                            title="Kamera Overhead (Line Crossing Detection)" 
+                            frameData={overheadFrame}
+                            subtitle={`Gandar Terdeteksi: ${detectedAxles} | Gandar Melintas: ${axleCount}`}
+                        />
+                    </div>
+
+                    <div className="w-full">
+                        <AnalysisPanel 
+                            axleCount={axleCount}
+                            vehicleId={vehicleId}
+                            classification={classification}
+                            detectionTime={detectionTime}
+                        />
+                    </div>
+
+                    {/* Kontrol Panel */}
+                    <div className="bg-gray-800 rounded-lg shadow-lg p-6">
+                        <div className="flex flex-col sm:flex-row gap-4">
+                            <button 
+                                onClick={handleResetClassification}
+                                className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded transition-colors"
+                            >
+                                Reset Klasifikasi
+                            </button>
+                        </div>
+                    </div>
+                </main>
             </div>
-
-            <div className="w-full">
-                <AnalysisPanel axleCount={axleCount} />
-            </div>
-
-            </main>
-        </div>
         </div>
     );
 }
