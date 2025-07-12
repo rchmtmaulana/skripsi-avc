@@ -39,7 +39,7 @@ RTSP_URL_FRONTAL = "rtsp://root:w4h!D.xXx@157.119.222.50:5541/media2/stream.sdp?
 
 # ==============================================================================
 # AREA TRANSAKSI
-TRANSACTION_AREA = {'x1': 0, 'y1': 0, 'x2': 200, 'y2': 480}
+TRANSACTION_AREA = {'x1': 0, 'y1': 0, 'x2': 160, 'y2': 480}
 # ==============================================================================
 
 class VehicleData:
@@ -55,6 +55,8 @@ class VehicleData:
         self.status = "detected"
         self.config_locked = False
         self.has_entered_transaction_zone = False
+        self.transaction_start_time = None
+        self.max_transaction_time = 15
 
 class VehicleQueue:
     def __init__(self):
@@ -203,12 +205,12 @@ class LineCrossingDetector:
         # --- KOORDINAT GARIS ---
 
         # Titik 1 (Ujung Kiri Bawah Garis)
-        x1 = 290
-        y1 = 360
+        x1 = 310
+        y1 = 230
 
         # Titik 2 (Ujung Kanan Atas Garis)
-        x2 = 530
-        y2 = 210
+        x2 = 470
+        y2 = 160
         # ------------------------------------
 
         self.line_x1 = x1
@@ -520,15 +522,16 @@ class FrontalVehicleManager:
         self.lock = Lock()
 
     def is_box_in_area(self, box, area):
-        """Mengecek apakah pusat bounding box berada di dalam area yang ditentukan."""
+        """Mengecek apakah bounding box overlap dengan area transaksi."""
         x1, y1, x2, y2 = box
-        center_x = (x1 + x2) / 2
-        center_y = (y1 + y2) / 2
-        return (area['x1'] < center_x < area['x2']) and \
-               (area['y1'] < center_y < area['y2'])
+        
+        # Gunakan overlap area, bukan hanya center point
+        return not (x2 < area['x1'] or x1 > area['x2'] or 
+                    y2 < area['y1'] or y1 > area['y2'])
 
     def update_status_based_on_zone(self, detections):
         with self.lock:
+            current_time = time.time()
             vehicle_is_in_transaction_zone = False
             any_vehicle_detected = False
 
@@ -547,10 +550,18 @@ class FrontalVehicleManager:
                 vehicle = self.vehicle_queue.get_vehicle(current_vehicle_id)
                 if not vehicle: return
 
+                if (vehicle.status == "in_transaction" and 
+                    vehicle.transaction_start_time and 
+                    current_time - vehicle.transaction_start_time > vehicle.max_transaction_time):
+                    print(f"⚠️ TIMEOUT: Kendaraan {current_vehicle_id} dipaksa selesai (timeout)")
+                    self.vehicle_queue.complete_current_vehicle()
+                    return
+                
                 # KASUS 1: Kendaraan sedang diproses, sekarang masuk zona transaksi
                 if vehicle_is_in_transaction_zone and vehicle.status != "in_transaction":
                     print(f"Kendaraan {current_vehicle_id} MASUK ZONA TRANSAKSI.")
                     vehicle.status = "in_transaction"
+                    vehicle.transaction_start_time = current_time
                     vehicle.has_entered_transaction_zone = True
 
                 # KASUS 2: Kendaraan sudah pernah di zona transaksi, dan sekarang zona itu kosong
@@ -764,7 +775,7 @@ def generate_frontal_stream():
         # Tambahkan teks label untuk area tersebut
         cv2.putText(rendered_frame, 'ZONA TRANSAKSI', 
                     (TRANSACTION_AREA['x1'] + 10, TRANSACTION_AREA['y1'] + 30), 
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
         # ==============================================================================
 
         ret, buffer = cv2.imencode('.jpg', rendered_frame, [cv2.IMWRITE_JPEG_QUALITY, 75])

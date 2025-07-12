@@ -1,0 +1,61 @@
+2025-07-12 01:33:21,405 - vehicle_detection - INFO - Menggunakan device: cuda
+2025-07-12 01:33:22,536 - vehicle_detection - INFO - Model berhasil dimuat | model=overhead.pt | device=cuda
+2025-07-12 01:33:22,537 - vehicle_detection - INFO - Model berhasil dimuat | model=frontal.pt | device=cuda
+2025-07-12 01:33:22,537 - vehicle_detection - INFO - Server akan berjalan di http://127.0.0.1:5000
+2025-07-12 01:33:25,397 - vehicle_detection - INFO - Menggunakan device: cuda
+2025-07-12 01:33:26,456 - vehicle_detection - INFO - Model berhasil dimuat | model=overhead.pt | device=cuda
+2025-07-12 01:33:26,456 - vehicle_detection - INFO - Model berhasil dimuat | model=frontal.pt | device=cuda
+2025-07-12 01:33:26,456 - vehicle_detection - INFO - Server akan berjalan di http://127.0.0.1:5000
+2025-07-12 01:33:26,572 - vehicle_detection - INFO - Client terhubung ke server
+2025-07-12 01:33:28,193 - vehicle_detection - INFO - Stream video dimulai | stream_type=overhead
+2025-07-12 01:33:29,786 - vehicle_detection - INFO - Stream video dimulai | stream_type=frontal
+2025-07-12 01:33:41,331 - vehicle_detection - WARNING - Sistem direset | reset_type=hard
+2025-07-12 01:33:41,331 - vehicle_detection - INFO - Sistem tracking overhead direset.
+2025-07-12 01:33:56,796 - vehicle_detection - INFO - Menggunakan device: cuda
+2025-07-12 01:33:58,369 - vehicle_detection - INFO - Model berhasil dimuat | model=overhead.pt | device=cuda
+2025-07-12 01:33:58,370 - vehicle_detection - INFO - Model berhasil dimuat | model=frontal.pt | device=cuda
+2025-07-12 01:33:58,370 - vehicle_detection - INFO - Server akan berjalan di http://127.0.0.1:5000
+2025-07-12 01:34:01,179 - vehicle_detection - INFO - Menggunakan device: cuda
+2025-07-12 01:34:02,232 - vehicle_detection - INFO - Model berhasil dimuat | model=overhead.pt | device=cuda
+2025-07-12 01:34:02,232 - vehicle_detection - INFO - Model berhasil dimuat | model=frontal.pt | device=cuda
+2025-07-12 01:34:02,232 - vehicle_detection - INFO - Server akan berjalan di http://127.0.0.1:5000
+2025-07-12 01:34:02,339 - vehicle_detection - INFO - Client terhubung ke server
+2025-07-12 01:34:03,961 - vehicle_detection - INFO - Stream video dimulai | stream_type=overhead
+2025-07-12 01:34:05,586 - vehicle_detection - INFO - Stream video dimulai | stream_type=frontal
+2025-07-12 01:39:26,773 - vehicle_detection - INFO - Menggunakan device: cuda
+2025-07-12 01:39:28,360 - vehicle_detection - INFO - Model berhasil dimuat | model=overhead.pt | device=cuda
+2025-07-12 01:39:28,361 - vehicle_detection - INFO - Model berhasil dimuat | model=frontal.pt | device=cuda
+2025-07-12 01:39:28,361 - vehicle_detection - INFO - Server akan berjalan di http://127.0.0.1:5000
+2025-07-12 01:39:31,371 - vehicle_detection - INFO - Menggunakan device: cuda
+2025-07-12 01:39:32,431 - vehicle_detection - INFO - Model berhasil dimuat | model=overhead.pt | device=cuda
+2025-07-12 01:39:32,431 - vehicle_detection - INFO - Model berhasil dimuat | model=frontal.pt | device=cuda
+2025-07-12 01:39:32,431 - vehicle_detection - INFO - Server akan berjalan di http://127.0.0.1:5000
+2025-07-12 01:39:32,540 - vehicle_detection - INFO - Client terhubung ke server
+2025-07-12 01:39:34,548 - vehicle_detection - INFO - Stream video dimulai | stream_type=overhead
+2025-07-12 01:39:36,463 - vehicle_detection - INFO - Stream video dimulai | stream_type=frontal
+2025-07-12 01:39:44,762 - vehicle_detection - INFO - Body kendaraan mulai menyentuh garis deteksi.
+2025-07-12 01:39:44,875 - vehicle_detection - INFO - Kendaraan baru dibuat | vehicle_id=V0001
+2025-07-12 01:39:44,875 - vehicle_detection - INFO - Memulai tracking untuk kendaraan baru | vehicle_id=V0001
+2025-07-12 01:39:45,353 - vehicle_detection - INFO - Body kendaraan meninggalkan garis deteksi (timeout).
+2025-07-12 01:39:45,353 - vehicle_detection - INFO - Auto-reset: Kendaraan selesai (body meninggalkan garis). | vehicle_id=V0001
+2025-07-12 01:39:45,354 - vehicle_detection - INFO - Kendaraan masuk antrean | vehicle_id=V0001 | axle_count=0
+2025-07-12 01:39:45,354 - vehicle_detection - INFO - Sistem tracking direset, siap untuk kendaraan baru.
+2025-07-12 01:39:45,470 - vehicle_detection - INFO - Kamera frontal mendeteksi kendaraan, mengambil dari antrean. | next_vehicle_id=V0001
+2025-07-12 01:39:45,470 - vehicle_detection - INFO - Status kendaraan berubah | vehicle_id=V0001 | from_status=counted_and_waiting | to_status=approaching
+2025-07-12 01:39:45,714 - vehicle_detection - INFO - Body kendaraan mulai menyentuh garis deteksi.
+2025-07-12 01:39:45,715 - vehicle_detection - INFO - Kendaraan baru dibuat | vehicle_id=V0002
+2025-07-12 01:39:45,715 - vehicle_detection - INFO - Memulai tracking untuk kendaraan baru | vehicle_id=V0002
+2025-07-12 01:39:46,597 - vehicle_detection - INFO - Body kendaraan meninggalkan garis deteksi (timeout).
+2025-07-12 01:39:46,598 - vehicle_detection - INFO - Auto-reset: Kendaraan selesai (body meninggalkan garis). | vehicle_id=V0002
+2025-07-12 01:39:46,598 - vehicle_detection - INFO - Kendaraan masuk antrean | vehicle_id=V0002 | axle_count=0
+2025-07-12 01:39:46,598 - vehicle_detection - INFO - Sistem tracking direset, siap untuk kendaraan baru.
+2025-07-12 01:39:48,654 - vehicle_detection - INFO - Konfigurasi ban dikoreksi | vehicle_id=V0001 | old_config=None | new_config=single_tire
+2025-07-12 01:39:49,587 - vehicle_detection - INFO - Jendela pembelajaran selesai. Konfigurasi dikunci. | vehicle_id=V0001 | config=single_tire
+2025-07-12 01:40:00,671 - vehicle_detection - INFO - Kendaraan masuk zona | vehicle_id=V0001 | zone=TRANSACTION
+2025-07-12 01:40:01,933 - vehicle_detection - INFO - Kendaraan keluar dari zona | vehicle_id=V0001 | zone=TRANSACTION
+2025-07-12 01:40:01,933 - vehicle_detection - INFO - Status kendaraan berubah | vehicle_id=V0001 | from_status=in_transaction | to_status=completed
+2025-07-12 01:40:02,024 - vehicle_detection - INFO - Kamera frontal mendeteksi kendaraan, mengambil dari antrean. | next_vehicle_id=V0002
+2025-07-12 01:40:02,026 - vehicle_detection - INFO - Status kendaraan berubah | vehicle_id=V0002 | from_status=counted_and_waiting | to_status=approaching
+2025-07-12 01:40:02,118 - vehicle_detection - INFO - Kendaraan masuk zona | vehicle_id=V0002 | zone=TRANSACTION
+2025-07-12 01:40:02,213 - vehicle_detection - INFO - Kendaraan keluar dari zona | vehicle_id=V0002 | zone=TRANSACTION
+2025-07-12 01:40:02,213 - vehicle_detection - INFO - Status kendaraan berubah | vehicle_id=V0002 | from_status=in_transaction | to_status=completed
