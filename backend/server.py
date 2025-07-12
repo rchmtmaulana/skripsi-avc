@@ -7,6 +7,9 @@ from flask_socketio import SocketIO, emit
 from ultralytics import YOLO
 import queue
 from threading import Lock
+from datetime import datetime
+import firebase_admin
+from firebase_admin import credentials, firestore
 
 os.environ['OPENCV_FFMPEG_CAPTURE_OPTIONS'] = 'rtsp_transport;tcp'
 
@@ -32,6 +35,45 @@ try:
 except Exception as e:
     print(f"Gagal memuat model: {e}")
     exit()
+
+class FirestoreManager:
+    def __init__(self, credentials_path):
+        try:
+            cred = credentials.Certificate(credentials_path)
+            firebase_admin.initialize_app(cred)
+            self.db = firestore.client()
+            print("✅ Firestore berhasil diinisialisasi")
+        except Exception as e:
+            print(f"❌ Gagal inisialisasi Firestore: {e}")
+            self.db = None
+
+    def save_vehicle_transaction(self, vehicle_data, processing_duration, entry_time, exit_time):
+        if not self.db:
+            print("Firestore client not available. Cannot save transaction.")
+            return
+
+        try:
+            doc_ref = self.db.collection('transactions').document()
+            doc_ref.set({
+                'vehicle_id': vehicle_data.vehicle_id,
+                'classification': vehicle_data.classification,
+                'axle_count': vehicle_data.axle_count,
+                'tire_config': vehicle_data.tire_config,
+                'entry_time': entry_time,
+                'exit_time': exit_time,
+                'processing_duration_seconds': round(processing_duration, 2) if processing_duration else None,
+                'status': 'completed'
+            })
+            print(f"Transaksi untuk {vehicle_data.vehicle_id} berhasil disimpan ke Firestore.")
+        except Exception as e:
+            print(f"Gagal menyimpan transaksi ke Firestore: {e}")
+
+try:
+    firestore_manager = FirestoreManager('./serviceAccountKey.json')
+    print("✅ Firestore berhasil diinisialisasi")
+except Exception as e:
+    print(f"❌ Gagal inisialisasi Firestore: {e}")
+    firestore_manager = None
 
 # URL RTSP
 RTSP_URL_OVERHEAD = "rtsp://root:w4h!D.xXx@157.119.222.50:5540/media2/stream.sdp?profile=Profile200"
@@ -134,6 +176,21 @@ class VehicleQueue:
     def complete_current_vehicle(self):
         if self.current_processing_vehicle:
             vehicle_id_completed = self.current_processing_vehicle
+            vehicle_data = self.vehicles[vehicle_id_completed]
+            # Hitung durasi pemrosesan
+            processing_duration = None
+            if self.processing_start_time:
+                processing_duration = time.time() - self.processing_start_time
+            
+            # Simpan ke Firestore
+            if firestore_manager:
+                firestore_manager.save_vehicle_transaction(
+                    vehicle_data=vehicle_data,
+                    processing_duration=processing_duration,
+                    entry_time=datetime.fromtimestamp(vehicle_data.transaction_start_time) if vehicle_data.transaction_start_time else None,
+                    exit_time=datetime.now()
+                )
+
             self.vehicles[vehicle_id_completed].status = "completed"
             print(f"✅ Transaksi KENDARAAN {vehicle_id_completed} SELESAI (completed)")
             
