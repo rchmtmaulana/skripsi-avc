@@ -47,7 +47,7 @@ class FirestoreManager:
             print(f"❌ Gagal inisialisasi Firestore: {e}")
             self.db = None
 
-    def save_vehicle_transaction(self, vehicle_data, processing_duration, entry_time, exit_time):
+    def save_vehicle_transaction(self, vehicle_data, processing_duration, entry_time, exit_time, is_timeout=False):
         if not self.db:
             print("Firestore client not available. Cannot save transaction.")
             return
@@ -62,11 +62,14 @@ class FirestoreManager:
                 'entry_time': entry_time,
                 'exit_time': exit_time,
                 'processing_duration_seconds': round(processing_duration, 2) if processing_duration else None,
-                'status': 'completed'
+                'status': 'timeout' if is_timeout else 'completed',
+                'is_timeout': is_timeout,  # Flag eksplisit
+                'created_at': datetime.now()
             })
-            print(f"Transaksi untuk {vehicle_data.vehicle_id} berhasil disimpan ke Firestore.")
+            status_text = "TIMEOUT" if is_timeout else "SELESAI"
+            print(f"📝 Transaksi {vehicle_data.vehicle_id} ({status_text}) disimpan ke Firestore")
         except Exception as e:
-            print(f"Gagal menyimpan transaksi ke Firestore: {e}")
+            print(f"❌ Gagal menyimpan transaksi ke Firestore: {e}")
 
 try:
     firestore_manager = FirestoreManager('./serviceAccountKey.json')
@@ -99,6 +102,8 @@ class VehicleData:
         self.has_entered_transaction_zone = False
         self.transaction_start_time = None
         self.max_transaction_time = 15
+        self.timeout_extended = False  # Flag untuk perpanjangan timeout
+        self.processing_attempts = 0   # Berapa kali kendaraan ini diproses
 
 class VehicleQueue:
     def __init__(self):
@@ -108,6 +113,7 @@ class VehicleQueue:
         self.processing_start_time = None
         self.LEARNING_WINDOW_SECONDS = 4
         self.lock = Lock()
+        self.timeout_vehicles = set()
 
     def finalize_vehicle_from_overhead(self, vehicle_id):
         with self.lock:
@@ -177,25 +183,32 @@ class VehicleQueue:
         if self.current_processing_vehicle:
             vehicle_id_completed = self.current_processing_vehicle
             vehicle_data = self.vehicles[vehicle_id_completed]
+            
+            # PERBAIKAN: Tandai sebagai timeout jika dipaksa selesai
+            if (vehicle_data.transaction_start_time and 
+                time.time() - vehicle_data.transaction_start_time > vehicle_data.max_transaction_time):
+                self.timeout_vehicles.add(vehicle_id_completed)
+                print(f"⚠️ {vehicle_id_completed} ditandai sebagai TIMEOUT")
+            
             # Hitung durasi pemrosesan
             processing_duration = None
             if self.processing_start_time:
                 processing_duration = time.time() - self.processing_start_time
             
-            # Simpan ke Firestore
+            # Simpan ke Firestore dengan flag timeout
             if firestore_manager:
                 firestore_manager.save_vehicle_transaction(
                     vehicle_data=vehicle_data,
                     processing_duration=processing_duration,
                     entry_time=datetime.fromtimestamp(vehicle_data.transaction_start_time) if vehicle_data.transaction_start_time else None,
-                    exit_time=datetime.now()
+                    exit_time=datetime.now(),
+                    is_timeout=vehicle_id_completed in self.timeout_vehicles
                 )
 
-            self.vehicles[vehicle_id_completed].status = "completed"
-            print(f"✅ Transaksi KENDARAAN {vehicle_id_completed} SELESAI (completed)")
+            vehicle_data.status = "completed"
+            print(f"✅ Transaksi {vehicle_id_completed} SELESAI")
             
             line_detector.finalize_vehicle(vehicle_id_completed)
-
             self.current_processing_vehicle = None
             self.processing_start_time = None
             return True
@@ -205,9 +218,22 @@ class VehicleQueue:
         with self.lock:
             if self.current_processing_vehicle: 
                 return None
+            
+            # PERBAIKAN: Prioritas kendaraan yang belum timeout
+            candidates = []
             for vehicle_id, vehicle_data in sorted(self.vehicles.items()):
                 if vehicle_data.status == "counted_and_waiting":
-                    return vehicle_id
+                    # Prioritaskan yang belum timeout
+                    if vehicle_id not in self.timeout_vehicles:
+                        candidates.append((vehicle_id, 0))  # Prioritas tinggi
+                    else:
+                        candidates.append((vehicle_id, 1))  # Prioritas rendah
+            
+            if candidates:
+                # Urutkan berdasarkan prioritas
+                candidates.sort(key=lambda x: x[1])
+                return candidates[0][0]
+            
             return None
     
     def classify_vehicle(self, vehicle_id):
@@ -577,12 +603,14 @@ class FrontalVehicleManager:
         self.vehicle_queue = vehicle_queue
         self.transaction_area = transaction_area
         self.lock = Lock()
+        self.zone_occupied = False
+        self.zone_occupation_start_time = None
+        self.zone_clear_confirmation_time = None
+        self.zone_clear_delay = 1.0  # Delay 2 detik untuk konfirmasi zona kosong
 
     def is_box_in_area(self, box, area):
         """Mengecek apakah bounding box overlap dengan area transaksi."""
         x1, y1, x2, y2 = box
-        
-        # Gunakan overlap area, bukan hanya center point
         return not (x2 < area['x1'] or x1 > area['x2'] or 
                     y2 < area['y1'] or y1 > area['y2'])
 
@@ -595,44 +623,73 @@ class FrontalVehicleManager:
             # Cek apakah ada kendaraan di dalam zona transaksi
             if detections:
                 for box in detections[0].boxes:
-                    any_vehicle_detected = True # Ada kendaraan terdeteksi di frame
+                    any_vehicle_detected = True
                     if self.is_box_in_area(box.xyxy[0], self.transaction_area):
                         vehicle_is_in_transaction_zone = True
-                        break # Cukup satu deteksi di dalam zona
+                        break
+
+            # === PERBAIKAN 1: TRACKING ZONA LEBIH KETAT ===
+            # Update status okupasi zona
+            if vehicle_is_in_transaction_zone:
+                if not self.zone_occupied:
+                    self.zone_occupied = True
+                    self.zone_occupation_start_time = current_time
+                    print(f"🏁 ZONA TRANSAKSI TERISI (waktu: {current_time:.2f})")
+                self.zone_clear_confirmation_time = None  # Reset timer clear
+            else:
+                if self.zone_occupied:
+                    if self.zone_clear_confirmation_time is None:
+                        self.zone_clear_confirmation_time = current_time
+                        print(f"⏳ ZONA MULAI KOSONG - Menunggu konfirmasi...")
+                    elif current_time - self.zone_clear_confirmation_time > self.zone_clear_delay:
+                        self.zone_occupied = False
+                        self.zone_occupation_start_time = None
+                        self.zone_clear_confirmation_time = None
+                        print(f"✅ ZONA TRANSAKSI BENAR-BENAR KOSONG")
 
             current_vehicle_id = self.vehicle_queue.current_processing_vehicle
             
-            # --- LOGIKA UTAMA ---
+            # === PERBAIKAN 2: LOGIKA TIMEOUT YANG LEBIH AMAN ===
             if current_vehicle_id:
                 vehicle = self.vehicle_queue.get_vehicle(current_vehicle_id)
-                if not vehicle: return
+                if not vehicle: 
+                    return
 
+                # TIMEOUT HANDLING - Hanya jika zona benar-benar kosong
                 if (vehicle.status == "in_transaction" and 
                     vehicle.transaction_start_time and 
                     current_time - vehicle.transaction_start_time > vehicle.max_transaction_time):
-                    print(f"⚠️ TIMEOUT: Kendaraan {current_vehicle_id} dipaksa selesai (timeout)")
-                    self.vehicle_queue.complete_current_vehicle()
-                    return
+                    
+                    # PERBAIKAN: Timeout hanya dipicu jika zona kosong
+                    if not self.zone_occupied:
+                        print(f"⚠️ TIMEOUT + ZONA KOSONG: {current_vehicle_id} dipaksa selesai")
+                        self.vehicle_queue.complete_current_vehicle()
+                        return
+                    else:
+                        print(f"⏰ TIMEOUT tapi zona masih terisi - menunggu {current_vehicle_id}")
+                        # Perpanjang timeout jika zona masih terisi
+                        vehicle.max_transaction_time = 60  # Perpanjang jadi 60 detik
                 
-                # KASUS 1: Kendaraan sedang diproses, sekarang masuk zona transaksi
+                # KASUS 1: Kendaraan masuk zona transaksi
                 if vehicle_is_in_transaction_zone and vehicle.status != "in_transaction":
-                    print(f"Kendaraan {current_vehicle_id} MASUK ZONA TRANSAKSI.")
+                    print(f"🚗 {current_vehicle_id} MASUK ZONA TRANSAKSI")
                     vehicle.status = "in_transaction"
                     vehicle.transaction_start_time = current_time
                     vehicle.has_entered_transaction_zone = True
 
-                # KASUS 2: Kendaraan sudah pernah di zona transaksi, dan sekarang zona itu kosong
-                # Ini adalah trigger untuk menyelesaikan transaksi.
-                elif not vehicle_is_in_transaction_zone and vehicle.has_entered_transaction_zone:
-                    print(f"Kendaraan {current_vehicle_id} telah MENINGGALKAN ZONA TRANSAKSI.")
+                # KASUS 2: Kendaraan keluar zona (dengan konfirmasi delay)
+                elif (not self.zone_occupied and 
+                      vehicle.has_entered_transaction_zone and 
+                      vehicle.status == "in_transaction"):
+                    print(f"🏁 {current_vehicle_id} KELUAR ZONA TRANSAKSI (konfirmasi)")
                     self.vehicle_queue.complete_current_vehicle()
             
-            # KASUS 3: Tidak ada kendaraan yang sedang diproses, DAN ada deteksi di frame
-            # Ini adalah trigger untuk memulai proses kendaraan berikutnya dari antrean.
-            elif not current_vehicle_id and any_vehicle_detected:
+            # === PERBAIKAN 3: DETEKSI KENDARAAN BARU LEBIH SELEKTIF ===
+            # Hanya ambil kendaraan baru jika zona benar-benar kosong
+            elif not current_vehicle_id and any_vehicle_detected and not self.zone_occupied:
                 next_vehicle_id = self.vehicle_queue.get_next_vehicle_for_processing()
                 if next_vehicle_id:
-                    print("Kamera frontal mendeteksi kendaraan baru, mengambil dari antrean.")
+                    print(f"🆕 Zona kosong - mengambil {next_vehicle_id} dari antrean")
                     self.vehicle_queue.set_current_processing_vehicle(next_vehicle_id)
 # ==============================================================================
 
