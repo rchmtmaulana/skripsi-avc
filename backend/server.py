@@ -271,6 +271,14 @@ class VehicleQueue:
         if classification_made:
             vehicle.is_classified = True
             print(f"Kendaraan {vehicle_id} TERKLASIFIKASI: {vehicle.classification}")
+            
+            analysis_data = {
+                'vehicle_id': vehicle.vehicle_id,
+                'classification': vehicle.classification,
+                'axle_count': vehicle.axle_count,
+                'detection_time': datetime.now(self.indonesia_tz).strftime("%H:%M:%S")
+            }
+            socketio.emit('update_analysis_panel', analysis_data)
     
     def get_current_vehicle_data(self):
         with self.lock:
@@ -688,13 +696,6 @@ class FrontalVehicleManager:
                     vehicle.transaction_start_time = current_time
                     vehicle.has_entered_transaction_zone = True
 
-                    analysis_data = {
-                        'vehicle_id': vehicle.vehicle_id,
-                        'classification': vehicle.classification,
-                        'axle_count': vehicle.axle_count,
-                        'detection_time': datetime.now(self.vehicle_queue.indonesia_tz).strftime("%H:%M:%S")
-                    }
-                    socketio.emit('update_analysis_panel', analysis_data)
                 # KASUS 2: Kendaraan keluar zona (dengan konfirmasi delay)
                 elif (not self.zone_occupied and 
                       vehicle.has_entered_transaction_zone and 
