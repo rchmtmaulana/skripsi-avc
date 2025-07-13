@@ -10,6 +10,7 @@ from threading import Lock
 from datetime import datetime
 import firebase_admin
 from firebase_admin import credentials, firestore
+import pytz
 
 os.environ['OPENCV_FFMPEG_CAPTURE_OPTIONS'] = 'rtsp_transport;tcp'
 
@@ -42,6 +43,7 @@ class FirestoreManager:
             cred = credentials.Certificate(credentials_path)
             firebase_admin.initialize_app(cred)
             self.db = firestore.client()
+            self.indonesia_tz = pytz.timezone('Asia/Makassar')
             print("✅ Firestore berhasil diinisialisasi")
         except Exception as e:
             print(f"❌ Gagal inisialisasi Firestore: {e}")
@@ -63,8 +65,7 @@ class FirestoreManager:
                 'exit_time': exit_time,
                 'processing_duration_seconds': round(processing_duration, 2) if processing_duration else None,
                 'status': 'timeout' if is_timeout else 'completed',
-                'is_timeout': is_timeout,  # Flag eksplisit
-                'created_at': datetime.now()
+                'is_timeout': is_timeout
             })
             status_text = "TIMEOUT" if is_timeout else "SELESAI"
             print(f"📝 Transaksi {vehicle_data.vehicle_id} ({status_text}) disimpan ke Firestore")
@@ -114,6 +115,7 @@ class VehicleQueue:
         self.LEARNING_WINDOW_SECONDS = 4
         self.lock = Lock()
         self.timeout_vehicles = set()
+        self.indonesia_tz = pytz.timezone('Asia/Makassar')
 
     def finalize_vehicle_from_overhead(self, vehicle_id):
         with self.lock:
@@ -197,11 +199,19 @@ class VehicleQueue:
             
             # Simpan ke Firestore dengan flag timeout
             if firestore_manager:
+                entry_time_aware = None
+                if vehicle_data.transaction_start_time:
+                    entry_time_aware = datetime.fromtimestamp(
+                        vehicle_data.transaction_start_time, 
+                        tz=self.indonesia_tz
+                    )
+                exit_time_aware = datetime.now(self.indonesia_tz)
+                
                 firestore_manager.save_vehicle_transaction(
                     vehicle_data=vehicle_data,
                     processing_duration=processing_duration,
-                    entry_time=datetime.fromtimestamp(vehicle_data.transaction_start_time) if vehicle_data.transaction_start_time else None,
-                    exit_time=datetime.now(),
+                    entry_time=entry_time_aware,
+                    exit_time=exit_time_aware,
                     is_timeout=vehicle_id_completed in self.timeout_vehicles
                 )
 
@@ -211,6 +221,7 @@ class VehicleQueue:
             line_detector.finalize_vehicle(vehicle_id_completed)
             self.current_processing_vehicle = None
             self.processing_start_time = None
+            socketio.emit('clear_analysis_panel')
             return True
         return False
     
@@ -606,7 +617,7 @@ class FrontalVehicleManager:
         self.zone_occupied = False
         self.zone_occupation_start_time = None
         self.zone_clear_confirmation_time = None
-        self.zone_clear_delay = 1.0  # Delay 2 detik untuk konfirmasi zona kosong
+        self.zone_clear_delay = 0.5  # Delay 0.5 detik untuk konfirmasi zona kosong
 
     def is_box_in_area(self, box, area):
         """Mengecek apakah bounding box overlap dengan area transaksi."""
@@ -677,6 +688,13 @@ class FrontalVehicleManager:
                     vehicle.transaction_start_time = current_time
                     vehicle.has_entered_transaction_zone = True
 
+                    analysis_data = {
+                        'vehicle_id': vehicle.vehicle_id,
+                        'classification': vehicle.classification,
+                        'axle_count': vehicle.axle_count,
+                        'detection_time': datetime.now(self.vehicle_queue.indonesia_tz).strftime("%H:%M:%S")
+                    }
+                    socketio.emit('update_analysis_panel', analysis_data)
                 # KASUS 2: Kendaraan keluar zona (dengan konfirmasi delay)
                 elif (not self.zone_occupied and 
                       vehicle.has_entered_transaction_zone and 

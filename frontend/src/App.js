@@ -14,6 +14,13 @@ function App() {
     const [detectedAxles, setDetectedAxles] = useState(0);
     const [socket, setSocket] = useState(null);
 
+    const resetAnalysisData = () => {
+        setAxleCount(0);
+        setVehicleId('---');
+        setClassification('--');
+        setDetectionTime('--:--:--');
+    };
+    
     useEffect(() => {
         const newSocket = io('http://127.0.0.1:5000');
         setSocket(newSocket);
@@ -24,20 +31,8 @@ function App() {
 
         newSocket.on('overhead_stream', data => {
             setOverheadFrame(data.image_data);
-            if (data.axle_count !== undefined) {
-                setAxleCount(data.axle_count);
-            }
             if (data.detected_axles !== undefined) {
                 setDetectedAxles(data.detected_axles);
-            }
-            if (data.vehicle_id) {
-                setVehicleId(data.vehicle_id);
-            }
-            if (data.classification) {
-                setClassification(data.classification);
-            }
-            if (data.detection_time) {
-                setDetectionTime(data.detection_time);
             }
         });
 
@@ -46,15 +41,19 @@ function App() {
             if (data.tire_config !== undefined) {
                 setTireConfig(data.tire_config);
             }
-            if (data.vehicle_id) {
-                setVehicleId(data.vehicle_id);
-            }
-            if (data.classification) {
-                setClassification(data.classification);
-            }
-            if (data.detection_time) {
-                setDetectionTime(data.detection_time);
-            }
+        });
+
+        newSocket.on('update_analysis_panel', data => {
+            console.log("Menerima data analisis:", data);
+            setVehicleId(data.vehicle_id);
+            setClassification(data.classification);
+            setAxleCount(data.axle_count);
+            setDetectionTime(data.detection_time);
+        });
+
+        newSocket.on('clear_analysis_panel', () => {
+            console.log("Membersihkan panel analisis.");
+            resetAnalysisData();
         });
 
         return () => {
@@ -66,11 +65,7 @@ function App() {
     const handleResetClassification = () => {
         if (socket) {
             socket.emit('reset_classification');
-            // Reset state lokal
-            setAxleCount(0);
-            setVehicleId('---');
-            setClassification('--');
-            setDetectionTime('--:--:--');
+            resetAnalysisData();
             setDetectedAxles(0);
             setTireConfig(null);
         }
@@ -78,17 +73,10 @@ function App() {
 
     const handleHardReset = () => {
         if (socket) {
-            // Kirim event baru ke server
             socket.emit('hard_reset_system');
-            
-            // Lakukan reset state lokal yang sama seperti reset biasa
-            setAxleCount(0);
-            setVehicleId('---');
-            setClassification('--');
-            setDetectionTime('--:--:--');
+            resetAnalysisData();
             setDetectedAxles(0);
             setTireConfig(null);
-            
             console.log("HARD RESET: Sinyal reset total dikirim ke server.");
         }
     };
