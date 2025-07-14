@@ -64,8 +64,7 @@ class FirestoreManager:
                 'entry_time': entry_time,
                 'exit_time': exit_time,
                 'processing_duration_seconds': round(processing_duration, 2) if processing_duration else None,
-                'status': 'timeout' if is_timeout else 'completed',
-                'is_timeout': is_timeout
+                'status': 'timeout' if is_timeout else 'completed'
             })
             status_text = "TIMEOUT" if is_timeout else "SELESAI"
             print(f"📝 Transaksi {vehicle_data.vehicle_id} ({status_text}) disimpan ke Firestore")
@@ -103,8 +102,8 @@ class VehicleData:
         self.has_entered_transaction_zone = False
         self.transaction_start_time = None
         self.max_transaction_time = 15
-        self.timeout_extended = False  # Flag untuk perpanjangan timeout
-        self.processing_attempts = 0   # Berapa kali kendaraan ini diproses
+        self.timeout_extended = False
+        self.processing_attempts = 0
 
 class VehicleQueue:
     def __init__(self):
@@ -112,7 +111,7 @@ class VehicleQueue:
         self.vehicle_counter = 0
         self.current_processing_vehicle = None
         self.processing_start_time = None
-        self.LEARNING_WINDOW_SECONDS = 4
+        self.LEARNING_WINDOW_SECONDS = 2
         self.lock = Lock()
         self.timeout_vehicles = set()
         self.indonesia_tz = pytz.timezone('Asia/Makassar')
@@ -307,12 +306,12 @@ class LineCrossingDetector:
         # --- KOORDINAT GARIS ---
 
         # Titik 1 (Ujung Kiri Bawah Garis)
-        x1 = 310
-        y1 = 230
+        x1 = 200
+        y1 = 260
 
         # Titik 2 (Ujung Kanan Atas Garis)
-        x2 = 470
-        y2 = 160
+        x2 = 350
+        y2 = 210
         # ------------------------------------
 
         self.line_x1 = x1
@@ -326,7 +325,7 @@ class LineCrossingDetector:
         self.current_vehicle_id = None
         self.history_frames = 5
         self.last_vehicle_time = time.time()
-        self.vehicle_timeout = 2.0
+        self.vehicle_timeout = 1.0
         self.lock = Lock()
         
         # TAMBAHAN: Untuk tracking body kendaraan
@@ -778,19 +777,16 @@ def generate_overhead_stream():
     vs = OptimizedVideoStream(src=RTSP_URL_OVERHEAD).start()
     print(f"Stream overhead dimulai...")
     
-    frame_skip_counter = 0
-    target_fps = 15
+    frame_counter = 0
+    target_fps = 30
     
     while True:
         frame = vs.read()
         if frame is None: 
             time.sleep(0.01)
             continue
-        
-        frame_skip_counter += 1
-        if frame_skip_counter % 3 != 0:
-            continue
 
+        frame_counter += 1
         try:
             small_frame = cv2.resize(frame, (640, 480), interpolation=cv2.INTER_LINEAR)
         except cv2.error:
@@ -802,7 +798,7 @@ def generate_overhead_stream():
         # Update tracking dengan hasil lengkap
         line_detector.update_axle_tracking(results, vehicle_queue)
         
-        if frame_skip_counter % 30 == 0:
+        if frame_counter % 30 == 0:
             vehicle_queue.cleanup_old_vehicles()
         
         rendered_frame = results[0].plot() if results else small_frame
@@ -861,17 +857,12 @@ def generate_frontal_stream():
     vs = OptimizedVideoStream(src=RTSP_URL_FRONTAL).start()
     print(f"Stream frontal dimulai...")
 
-    frame_skip_counter = 0
-    target_fps = 15
+    target_fps = 30
     
     while True:
         frame = vs.read()
         if frame is None: 
             time.sleep(0.01)
-            continue
-            
-        frame_skip_counter += 1
-        if frame_skip_counter % 3 != 0:
             continue
 
         try:
