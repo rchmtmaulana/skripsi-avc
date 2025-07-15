@@ -111,7 +111,7 @@ class VehicleQueue:
         self.vehicle_counter = 0
         self.current_processing_vehicle = None
         self.processing_start_time = None
-        self.LEARNING_WINDOW_SECONDS = 2
+        self.LEARNING_WINDOW_SECONDS = 4
         self.lock = Lock()
         self.timeout_vehicles = set()
         self.indonesia_tz = pytz.timezone('Asia/Makassar')
@@ -271,13 +271,14 @@ class VehicleQueue:
             vehicle.is_classified = True
             print(f"Kendaraan {vehicle_id} TERKLASIFIKASI: {vehicle.classification}")
             
-            analysis_data = {
-                'vehicle_id': vehicle.vehicle_id,
-                'classification': vehicle.classification,
-                'axle_count': vehicle.axle_count,
-                'detection_time': datetime.now(self.indonesia_tz).strftime("%H:%M:%S")
-            }
-            socketio.emit('update_analysis_panel', analysis_data)
+            if vehicle.axle_count == 2:    
+                analysis_data = {
+                    'vehicle_id': vehicle.vehicle_id,
+                    'classification': vehicle.classification,
+                    'axle_count': vehicle.axle_count,
+                    'detection_time': datetime.now(self.indonesia_tz).strftime("%H:%M:%S")
+                }
+                socketio.emit('update_analysis_panel', analysis_data)
     
     def get_current_vehicle_data(self):
         with self.lock:
@@ -694,6 +695,16 @@ class FrontalVehicleManager:
                     vehicle.status = "in_transaction"
                     vehicle.transaction_start_time = current_time
                     vehicle.has_entered_transaction_zone = True
+
+                    if vehicle.is_classified:
+                        print(f"Mengirim analisis tertunda untuk {current_vehicle_id} ({vehicle.classification})")
+                        analysis_data = {
+                            'vehicle_id': vehicle.vehicle_id,
+                            'classification': vehicle.classification,
+                            'axle_count': vehicle.axle_count,
+                            'detection_time': datetime.now(self.vehicle_queue.indonesia_tz).strftime("%H:%M:%S")
+                        }
+                        socketio.emit('update_analysis_panel', analysis_data)
 
                 # KASUS 2: Kendaraan keluar zona (dengan konfirmasi delay)
                 elif (not self.zone_occupied and 
