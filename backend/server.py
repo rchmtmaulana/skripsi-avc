@@ -127,6 +127,9 @@ class VehicleQueue:
                 else:
                     print(f"SKIP: {vehicle_id} tidak memiliki axle, dihapus dari sistem.")
                     del self.vehicles[vehicle_id]
+                    
+                    self.vehicle_counter -= 1
+                    print(f"ID {vehicle_id} akan digunakan kembali. Counter direset menjadi: {self.vehicle_counter}")
         
     def create_new_vehicle(self):
         with self.lock:
@@ -561,7 +564,7 @@ class LineCrossingDetector:
         if self.is_point_crossing_line(prev_x, prev_y, new_x, new_y):
             axle_data['crossed'] = True
             vehicle_id = axle_data['vehicle_id']
-            print(f"✅ Axle {axle_id} (Kendaraan {vehicle_id}) MELINTASI GARIS DIAGONAL!")
+            print(f"✅ Axle {axle_id} (Kendaraan {vehicle_id}) MELINTASI GARIS DETEKSI!")
             if vehicle_id:
                 current_count = self.get_crossed_axles_count_for_vehicle(vehicle_id)
                 vehicle_queue.update_vehicle_axle_count(vehicle_id, current_count)
