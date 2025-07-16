@@ -119,17 +119,19 @@ class VehicleQueue:
     def finalize_vehicle_from_overhead(self, vehicle_id):
         with self.lock:
             if vehicle_id in self.vehicles:
-                vehicle = self.vehicles[vehicle_id]
-                # Validasi: hanya finalisasi jika ada axle yang terdeteksi
-                if vehicle.axle_count > 0:
-                    vehicle.status = "counted_and_waiting"
-                    print(f"ANTREAN: {vehicle_id} (gandar: {vehicle.axle_count}) masuk antrean.")
-                else:
-                    print(f"SKIP: {vehicle_id} tidak memiliki axle, dihapus dari sistem.")
+                # Cek jika gandar 0 (ghost detection)
+                if self.vehicles[vehicle_id].axle_count == 0:
+                    print(f"GHOST DETECTED: {vehicle_id} memiliki 0 gandar. ID akan di-reuse.")
+                    # Hapus kendaraan hantu dari daftar
                     del self.vehicles[vehicle_id]
-                    
+                    # Mundurkan counter agar ID dapat digunakan kembali
                     self.vehicle_counter -= 1
-                    print(f"ID {vehicle_id} akan digunakan kembali. Counter direset menjadi: {self.vehicle_counter}")
+                    print(f"Counter direset ke: {self.vehicle_counter}. ID berikutnya akan menjadi V{(self.vehicle_counter + 1):04d}.")
+                    return
+
+                # Jika bukan ghost detection, lanjutkan proses
+                self.vehicles[vehicle_id].status = "counted_and_waiting"
+                print(f"ANTREAN: {vehicle_id} (gandar: {self.vehicles[vehicle_id].axle_count}) masuk antrean.")
         
     def create_new_vehicle(self):
         with self.lock:
@@ -299,7 +301,7 @@ class VehicleQueue:
             current_time = time.time()
             to_remove = [
                 vid for vid, vdata in self.vehicles.items() 
-                if (vdata.status == "completed" and current_time - vdata.created_time > 10) or \
+                if (vdata.status == "completed" and current_time - vdata.created_time > 60) or \
                     (vdata.status == "detected" and vdata.axle_count == 0 and current_time - vdata.created_time > 20)
             ]
             for vehicle_id in to_remove:
@@ -353,11 +355,6 @@ class LineCrossingDetector:
         
         distance = abs(a * px + b * py + c) / np.sqrt(a * a + b * b)
         return distance
-    
-    def is_axle_near_line(self, center_x, center_y, threshold=50):
-        """Cek apakah axle cukup dekat dengan garis untuk memulai tracking"""
-        distance = self.point_to_line_distance(center_x, center_y)
-        return distance <= threshold
 
     def is_point_crossing_line(self, px1, py1, px2, py2):
         """Cek apakah titik melintasi garis diagonal"""
@@ -507,15 +504,10 @@ class LineCrossingDetector:
                     if len(self.tracked_axles[matched_id]['positions']) > self.history_frames:
                         self.tracked_axles[matched_id]['positions'].pop(0)
                 else:
-                    # PERUBAHAN UTAMA: Buat kendaraan baru HANYA jika belum ada dan body menyentuh garis
-                    # DAN ada axle yang terdeteksi dekat dengan garis
-                    if (self.current_vehicle_id is None and 
-                        self.vehicle_body_touching_line and
-                        self.is_axle_near_line(center_x, center_y, threshold=50)):  # Tambah pengecekan jarak
-                        
+                    # Buat kendaraan baru jika belum ada dan body menyentuh garis
+                    if self.current_vehicle_id is None and self.vehicle_body_touching_line:
                         self.start_new_vehicle(vehicle_queue)
 
-                    # Hanya buat tracking axle jika sudah ada kendaraan aktif
                     if self.current_vehicle_id:
                         self.axle_id_counter += 1
                         new_axle_id = self.axle_id_counter
@@ -534,7 +526,7 @@ class LineCrossingDetector:
         new_vehicle_id = vehicle_queue.create_new_vehicle()
         self.current_vehicle_id = new_vehicle_id
         self.current_vehicle_axles[self.current_vehicle_id] = []
-        print(f"--- AXLE DETECTED: Memulai tracking untuk kendaraan baru: {self.current_vehicle_id} ---")
+        print(f"--- Memulai tracking untuk kendaraan baru: {self.current_vehicle_id} ---")
 
     def find_closest_axle(self, center_x, center_y, max_distance=80):
         min_distance = float('inf')
@@ -564,7 +556,7 @@ class LineCrossingDetector:
         if self.is_point_crossing_line(prev_x, prev_y, new_x, new_y):
             axle_data['crossed'] = True
             vehicle_id = axle_data['vehicle_id']
-            print(f"✅ Axle {axle_id} (Kendaraan {vehicle_id}) MELINTASI GARIS DETEKSI!")
+            print(f"✅ Axle {axle_id} (Kendaraan {vehicle_id}) MELINTASI GARIS DIAGONAL!")
             if vehicle_id:
                 current_count = self.get_crossed_axles_count_for_vehicle(vehicle_id)
                 vehicle_queue.update_vehicle_axle_count(vehicle_id, current_count)
