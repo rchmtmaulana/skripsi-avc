@@ -1,0 +1,29 @@
+{
+    "rtsp_urls": {
+        "overhead": "rtsp://root:w4h!D.xXx@192.168.55.35:5540/media2/stream.sdp?profile=Profile200",
+        "frontal": "rtsp://root:w4h!D.xXx@192.168.55.25:5541/media2/stream.sdp?profile=Profile200"
+    },
+    "model_paths": {
+        "overhead": "models/overhead_large.pt",
+        "frontal": "models/frontal.pt"
+    },
+    "firestore_key_path": "./serviceAccountKey.json",
+    "transaction_area": {
+        "x1": 0,
+        "y1": 0,
+        "x2": 160,
+        "y2": 480
+    },
+    "line_crossing_detector": {
+        "line_coords": [260, 320, 480, 210],
+        "body_timeout": 0.5
+    },
+    "vehicle_queue": {
+        "learning_window_seconds": 4,
+        "max_transaction_time": 15
+    },
+    "server": {
+        "host": "127.0.0.1",
+        "port": 5000
+    }
+}
