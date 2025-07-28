@@ -26,7 +26,7 @@ except json.JSONDecodeError:
 os.environ['OPENCV_FFMPEG_CAPTURE_OPTIONS'] = 'rtsp_transport;tcp'
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'secret!key' 
+app.config['SECRET_KEY'] = 'secret!key'
 socketio = SocketIO(app, cors_allowed_origins="*")
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -37,13 +37,13 @@ print(f"==========================================")
 try:
     model_overhead_path = config['model_paths']['overhead']
     model_frontal_path = config['model_paths']['frontal']
-    
+
     model_overhead = YOLO(model_overhead_path).to(device)
     model_frontal = YOLO(model_frontal_path).to(device)
-    
+
     model_overhead.fuse()
     model_frontal.fuse()
-    
+
     print(f"Model '{model_overhead_path}' dan '{model_frontal_path}' berhasil dimuat ke device.")
 except Exception as e:
     print(f"Gagal memuat model: {e}")
@@ -111,6 +111,8 @@ class VehicleData:
         self.max_transaction_time = config['vehicle_queue']['max_transaction_time']
         self.timeout_extended = False
         self.processing_attempts = 0
+        self.bus_detection_count = 0
+        self.truck_detection_count = 0
 
 class VehicleQueue:
     def __init__(self):
@@ -580,29 +582,44 @@ class OptimizedVideoStream:
         self.stream.release()
 
 def detect_tire_config_from_detections(results):
-    if not results or not results[0].boxes: return None
+    if not results or not results[0].boxes: return None, False
+    is_bus = False
+    tire_config = None
     for box in results[0].boxes:
         class_id = int(box.cls)
-        if class_id == 3: return "single_tire"
-        elif class_id == 2: return "double_tire"
-    return None
+        if class_id == 0: # bus class
+            is_bus = True
+        elif class_id == 3: 
+            tire_config = "single_tire"
+        elif class_id == 2: 
+            tire_config = "double_tire"
+    return tire_config, is_bus
 
 def generate_overhead_stream():
     vs = OptimizedVideoStream(src=RTSP_URL_OVERHEAD).start()
     print(f"Stream overhead dimulai...")
+    
+    frame_counter = 0
+    target_fps = 30
     
     while True:
         frame = vs.read()
         if frame is None:
             time.sleep(0.01)
             continue
+
+        frame_counter += 1
         try:
             small_frame = cv2.resize(frame, (640, 480), interpolation=cv2.INTER_LINEAR)
         except cv2.error:
             continue 
 
         results = list(model_overhead(small_frame, stream=True, verbose=False, conf=0.5))
+
         line_detector.update_axle_tracking(results, vehicle_queue)
+        
+        if frame_counter % 30 == 0:
+            vehicle_queue.cleanup_old_vehicles()
         
         rendered_frame = results[0].plot() if results else small_frame
         rendered_frame = line_detector.draw_line_and_info(rendered_frame)
@@ -611,18 +628,62 @@ def generate_overhead_stream():
         if not ret: continue
         
         frame_base64 = base64.b64encode(buffer.tobytes()).decode('utf-8')
-        socketio.emit('overhead_stream', {'image_data': frame_base64})
-        time.sleep(1.0 / 30)
+        
+        current_vehicle = vehicle_queue.get_current_vehicle_data()
+        data_to_emit = {}
+        if current_vehicle:
+            data_to_emit = {
+                'vehicle_id': current_vehicle.vehicle_id, 
+                'axle_count': current_vehicle.axle_count,
+                'classification': current_vehicle.classification, 
+                'detection_time': current_vehicle.detection_time
+            }
+        else:
+            last_overhead_id = line_detector.current_vehicle_id
+            last_vehicle = vehicle_queue.get_vehicle(last_overhead_id) if last_overhead_id else None
+            if last_vehicle:
+                data_to_emit = {
+                    'vehicle_id': last_vehicle.vehicle_id, 
+                    'axle_count': last_vehicle.axle_count,
+                    'classification': last_vehicle.classification, 
+                    'detection_time': last_vehicle.detection_time
+                }
+            else:
+                data_to_emit = {
+                    'vehicle_id': "---", 
+                    'axle_count': 0, 
+                    'classification': "--", 
+                    'detection_time': "--:--:--"
+                }
+
+        data_to_emit['image_data'] = frame_base64
+        
+        # Hitung jumlah axle yang terdeteksi dari hasil detection
+        axle_count = 0
+        if results and results[0].boxes is not None:
+            for box in results[0].boxes:
+                if int(box.cls) == 0:  # axle class
+                    axle_count += 1
+        
+        data_to_emit['detected_axles'] = axle_count
+        data_to_emit['system_status'] = 'AKTIF' if line_detector.vehicle_body_touching_line else 'STANDBY'
+        
+        socketio.emit('overhead_stream', data_to_emit)
+        
+        time.sleep(1.0 / target_fps)
 
 def generate_frontal_stream():
     vs = OptimizedVideoStream(src=RTSP_URL_FRONTAL).start()
     print(f"Stream frontal dimulai...")
+
+    target_fps = 30
     
     while True:
         frame = vs.read()
-        if frame is None:
+        if frame is None: 
             time.sleep(0.01)
             continue
+
         try:
             small_frame = cv2.resize(frame, (640, 480), interpolation=cv2.INTER_LINEAR)
         except cv2.error:
@@ -632,16 +693,46 @@ def generate_frontal_stream():
         
         frontal_manager.update_status_based_on_zone(results)
         
-        tire_config = detect_tire_config_from_detections(results)
-        if tire_config and vehicle_queue.current_processing_vehicle:
-            vehicle_queue.update_vehicle_tire_config(vehicle_queue.current_processing_vehicle, tire_config)
+        tire_config, is_bus = detect_tire_config_from_detections(results)
         
+        if vehicle_queue.current_processing_vehicle:
+            proc_id = vehicle_queue.current_processing_vehicle
+            vehicle = vehicle_queue.get_vehicle(proc_id)
+
+            if vehicle:
+                if is_bus:
+                    vehicle.bus_detection_count += 1
+                
+                if vehicle.bus_detection_count > 5 and not vehicle.is_classified:
+                    with vehicle_queue.lock:
+                        print(f"DETEKSI BUS TERKONFIRMASI: {proc_id} diklasifikasikan sebagai Golongan 1.")
+                        vehicle.classification = "Golongan 1"
+                        vehicle.is_classified = True
+                        
+                        analysis_data = {
+                            'vehicle_id': vehicle.vehicle_id,
+                            'classification': vehicle.classification,
+                            'axle_count': vehicle.axle_count,
+                            'detection_time': datetime.now(vehicle_queue.indonesia_tz).strftime("%H:%M:%S")
+                        }
+                        socketio.emit('update_analysis_panel', analysis_data)
+                
+                elif tire_config and not vehicle.is_classified:
+                    vehicle_queue.update_vehicle_tire_config(proc_id, tire_config)
+
         rendered_frame = results[0].plot() if results else small_frame
         
         overlay = rendered_frame.copy()
-        cv2.rectangle(overlay, (TRANSACTION_AREA['x1'], TRANSACTION_AREA['y1']), (TRANSACTION_AREA['x2'], TRANSACTION_AREA['y2']), (0, 255, 0), -1)
-        rendered_frame = cv2.addWeighted(overlay, 0.2, rendered_frame, 0.8, 0)
-        cv2.putText(rendered_frame, 'ZONA TRANSAKSI', (TRANSACTION_AREA['x1'] + 10, TRANSACTION_AREA['y1'] + 30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
+        cv2.rectangle(overlay, 
+                    (TRANSACTION_AREA['x1'], TRANSACTION_AREA['y1']), 
+                    (TRANSACTION_AREA['x2'], TRANSACTION_AREA['y2']), 
+                    (0, 255, 0), -1)
+        alpha = 0.2  
+        rendered_frame = cv2.addWeighted(overlay, alpha, rendered_frame, 1 - alpha, 0)
+        
+        cv2.putText(rendered_frame, 'ZONA TRANSAKSI', 
+                    (TRANSACTION_AREA['x1'] + 10, TRANSACTION_AREA['y1'] + 30), 
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
 
         ret, buffer = cv2.imencode('.jpg', rendered_frame, [cv2.IMWRITE_JPEG_QUALITY, 75])
         if not ret: continue
@@ -654,14 +745,18 @@ def generate_frontal_stream():
             data_to_emit = {
                 'vehicle_id': current_vehicle.vehicle_id, 
                 'classification': current_vehicle.classification,
-                'status': current_vehicle.status
+                'detection_time': current_vehicle.detection_time, 
+                'status': current_vehicle.status 
             }
         else:
-            data_to_emit = {'vehicle_id': "---", 'classification': "--", 'status': 'idle'}
+            data_to_emit = {'vehicle_id': "---", 'classification': "--", 'detection_time': "--:--:--", 'status': 'idle'}
         
         data_to_emit['image_data'] = frame_base64
+        data_to_emit['tire_config'] = tire_config
+        
         socketio.emit('frontal_stream', data_to_emit)
-        time.sleep(1.0 / 30)
+        
+        time.sleep(1.0 / target_fps)
 
 @socketio.on('connect')
 def handle_connect():
@@ -707,14 +802,6 @@ def handle_hard_reset():
         line_detector.current_vehicle_id = None
         line_detector.axle_id_counter = 0
         print("Sistem deteksi garis dan counter axle direset.")
-
-@socketio.on('set_detection_line')
-def handle_set_line(data):
-    global line_detector
-    if 'line_y' in data and isinstance(data['line_y'], int):
-        with line_detector.lock:
-            line_detector.line_y = data['line_y']
-        print(f"Garis deteksi dipindah ke Y: {data['line_y']}")
 
 if __name__ == '__main__':
     server_host = config['server']['host']

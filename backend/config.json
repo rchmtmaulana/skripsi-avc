@@ -15,11 +15,11 @@
         "y2": 480
     },
     "line_crossing_detector": {
-        "line_coords": [260, 320, 480, 210],
-        "body_timeout": 0.5
+        "line_coords": [200, 270, 390, 190],
+        "body_timeout": 0.25
     },
     "vehicle_queue": {
-        "learning_window_seconds": 4,
+        "learning_window_seconds": 3,
         "max_transaction_time": 15
     },
     "server": {
