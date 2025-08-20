@@ -1,11 +1,11 @@
 {
     "rtsp_urls": {
-        "overhead": "rtsp://root:w4h!D.xXx@192.168.55.35:5540/media2/stream.sdp?profile=Profile200",
-        "frontal": "rtsp://root:w4h!D.xXx@192.168.55.25:5541/media2/stream.sdp?profile=Profile200"
+        "overhead": "rtsp://root:w4h!D.xXx@157.119.222.50:5540/media2/stream.sdp?profile=Profile200",
+        "frontal": "rtsp://root:w4h!D.xXx@157.119.222.50:5541/media2/stream.sdp?profile=Profile200"
     },
     "model_paths": {
-        "overhead": "models/overhead_large.pt",
-        "frontal": "models/frontal.pt"
+        "overhead": "models/best-overhead.pt",
+        "frontal": "models/best-frontal.pt"
     },
     "firestore_key_path": "./serviceAccountKey.json",
     "transaction_area": {

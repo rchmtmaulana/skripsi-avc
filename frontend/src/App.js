@@ -14,6 +14,9 @@ function App() {
     const [detectedAxles, setDetectedAxles] = useState(0);
     const [socket, setSocket] = useState(null);
 
+    const [overheadStatus, setOverheadStatus] = useState('pending');
+    const [frontalStatus, setFrontalStatus] = useState('pending');
+    
     const resetAnalysisData = () => {
         setAxleCount(0);
         setVehicleId('---');
@@ -29,8 +32,15 @@ function App() {
             console.log('Terhubung ke server backend!');
         });
 
+        newSocket.on('disconnect', () => {
+            console.log('Koneksi ke server terputus.');
+            setOverheadStatus('disconnected');
+            setFrontalStatus('disconnected');
+        });
+
         newSocket.on('overhead_stream', data => {
             setOverheadFrame(data.image_data);
+            setOverheadStatus(data.connection_status);
             if (data.detected_axles !== undefined) {
                 setDetectedAxles(data.detected_axles);
             }
@@ -38,6 +48,7 @@ function App() {
 
         newSocket.on('frontal_stream', data => {
             setFrontalFrame(data.image_data);
+            setFrontalStatus(data.connection_status);
             if (data.tire_config !== undefined) {
                 setTireConfig(data.tire_config);
             }
@@ -98,11 +109,13 @@ function App() {
                         <VideoStream 
                             title="Kamera Frontal (Deteksi Konfigurasi Ban)" 
                             frameData={frontalFrame}
+                            status={frontalStatus}
                             subtitle={tireConfig ? `Konfigurasi: ${tireConfig}` : 'Menunggu deteksi...'}
                         />
                         <VideoStream 
                             title="Kamera Overhead (Line Crossing Detection)" 
                             frameData={overheadFrame}
+                            status={overheadStatus}
                             subtitle={`Gandar Terdeteksi: ${detectedAxles} | Gandar Melintas: ${axleCount}`}
                         />
                     </div>

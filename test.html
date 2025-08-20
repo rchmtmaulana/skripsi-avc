@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Trigger Sensor</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
+</head>
+<body>
+    <h1>Tes Sinyal Sensor</h1>
+    <button id="triggerButton">Kirim Sinyal</button>
+    <p>Status: <span id="status">Menunggu koneksi...</span></p>
+
+    <script>
+        const socket = io("http://127.0.0.1:5000");
+        const statusEl = document.getElementById('status');
+        const triggerButton = document.getElementById('triggerButton');
+
+        socket.on('connect', () => {
+            console.log('Terhubung ke server!');
+            statusEl.textContent = 'Terhubung!';
+            statusEl.style.color = 'green';
+        });
+
+        socket.on('disconnect', () => {
+            console.log('Terputus dari server.');
+            statusEl.textContent = 'Terputus.';
+            statusEl.style.color = 'red';
+        });
+
+        triggerButton.onclick = () => {
+            console.log("Mengirim event 'obs_trigger'...");
+            socket.emit('obs_trigger', { source: 'web_button' });
+            alert("Sinyal 'obs_trigger' telah dikirim!");
+        };
+    </script>
+</body>
+</html>
