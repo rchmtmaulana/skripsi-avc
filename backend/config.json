@@ -19,7 +19,7 @@
         "body_timeout": 0.25
     },
     "vehicle_queue": {
-        "learning_window_seconds": 3,
+        "learning_window_seconds": 2,
         "max_transaction_time": 15
     },
     "server": {

@@ -174,22 +174,24 @@ class VehicleQueue:
     
     def update_vehicle_tire_config(self, vehicle_id, new_tire_config):
         with self.lock:
-            if vehicle_id in self.vehicles:
-                vehicle = self.vehicles[vehicle_id]
+            if vehicle_id not in self.vehicles:
+                return
+            
+            vehicle = self.vehicles[vehicle_id]
+
+            if vehicle.config_locked:
+                return
+
+            if new_tire_config and new_tire_config != vehicle.tire_config:
+                print(f"KOREKSI Konfigurasi Ban untuk {vehicle_id}: dari '{vehicle.tire_config}' menjadi '{new_tire_config}'")
+                vehicle.tire_config = new_tire_config
+
+            if self.processing_start_time and (time.time() - self.processing_start_time > self.LEARNING_WINDOW_SECONDS):
+                print(f"--- Jendela pembelajaran untuk {vehicle_id} selesai. Konfigurasi final '{vehicle.tire_config}' dikunci. ---")
                 
-                if vehicle.config_locked:
-                    return
-
-                if self.processing_start_time and (time.time() - self.processing_start_time > self.LEARNING_WINDOW_SECONDS):
-                    print(f"--- Jendela pembelajaran untuk {vehicle_id} selesai. Konfigurasi '{vehicle.tire_config}' dikunci. ---")
-                    vehicle.config_locked = True
-                    return
-
-                if new_tire_config and new_tire_config != vehicle.tire_config:
-                    print(f"KOREKSI Konfigurasi Ban untuk {vehicle_id}: dari '{vehicle.tire_config}' menjadi '{new_tire_config}'")
-                    vehicle.tire_config = new_tire_config
-                    vehicle.is_classified = False
-                    self.classify_vehicle(vehicle_id)
+                vehicle.config_locked = True
+                
+                self.classify_vehicle(vehicle_id)
     
     def set_current_processing_vehicle(self, vehicle_id):
         with self.lock:
@@ -733,8 +735,12 @@ def generate_frontal_stream():
                             'axle_count': vehicle.axle_count,
                             'detection_time': datetime.now(vehicle_queue.indonesia_tz).strftime("%H:%M:%S")
                         })
-                elif tire_config and not vehicle.is_classified:
+
+                if tire_config and not vehicle.config_locked:
                     vehicle_queue.update_vehicle_tire_config(proc_id, tire_config)
+
+                elif not vehicle.config_locked:
+                    vehicle_queue.update_vehicle_tire_config(proc_id, vehicle.tire_config)
 
         rendered_frame = results[0].plot() if results else small_frame
         overlay = rendered_frame.copy()
